@@ -15,7 +15,9 @@ from Crypto.Random import get_random_bytes
 
 
 # ─── Encryption Helpers ──────────────────────────────────
-_DB_KEY = get_random_bytes(32)  # AES-256 key (would be user-derived in prod)
+# Use a static key for the demo so multiple processes (bot & dashboard) can decrypt the same DB.
+# In production, this would be user-derived and stored in a secure enclave.
+_DB_KEY = b"Foresight_Demo_Key_32_Bytes_Long"
 
 
 def _encrypt_string(plaintext: str) -> str:
@@ -28,10 +30,14 @@ def _encrypt_string(plaintext: str) -> str:
 
 def _decrypt_string(b64_ciphertext: str) -> str:
     """Decrypt an AES-256-GCM encrypted base64 string."""
-    raw = base64.b64decode(b64_ciphertext)
-    nonce, tag, ct = raw[:16], raw[16:32], raw[32:]
-    cipher = AES.new(_DB_KEY, AES.MODE_GCM, nonce=nonce)
-    return cipher.decrypt_and_verify(ct, tag).decode("utf-8")
+    try:
+        raw = base64.b64decode(b64_ciphertext)
+        nonce, tag, ct = raw[:16], raw[16:32], raw[32:]
+        cipher = AES.new(_DB_KEY, AES.MODE_GCM, nonce=nonce)
+        return cipher.decrypt_and_verify(ct, tag).decode("utf-8")
+    except Exception:
+        # Fallback for plain text or corrupt ciphertext
+        return b64_ciphertext
 
 
 # ─── Schema ──────────────────────────────────────────────
@@ -235,10 +241,65 @@ def get_db_stats(db_path: str) -> dict:
     stats = {}
     for table in ["buyers_registry", "invoices_ledger", "cash_transactions",
                   "pending_transactions", "fhe_cache"]:
-        cursor.execute(f"SELECT COUNT(*) FROM {table}")
-        stats[table] = cursor.fetchone()[0]
+        try:
+            cursor.execute(f"SELECT COUNT(*) FROM {table}")
+            stats[table] = cursor.fetchone()[0]
+        except sqlite3.OperationalError:
+            stats[table] = 0
     conn.close()
     return stats
+
+
+def fetch_live_cash_transactions(db_path: str) -> list:
+    """Fetch and decrypt live cash transactions from the SQLite database."""
+    if not os.path.exists(db_path):
+        return []
+        
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    
+    transactions = []
+    
+    # Fetch approved transactions
+    try:
+        cursor.execute("SELECT * FROM cash_transactions")
+        for row in cursor.fetchall():
+            transactions.append({
+                "tx_id": row["tx_id"],
+                "amount": row["amount"],
+                "vendor": _decrypt_string(row["vendor_encrypted"]) if row["vendor_encrypted"] else "Unknown",
+                "category": row["category"],
+                "date": row["date"],
+                "raw_message": _decrypt_string(row["raw_message_enc"]) if row["raw_message_enc"] else "",
+                "status": row["status"],
+                "logged_by": _decrypt_string(row["logged_by_enc"]) if row["logged_by_enc"] else "Bot"
+            })
+    except sqlite3.OperationalError:
+        pass
+        
+    # Fetch pending transactions
+    try:
+        cursor.execute("SELECT * FROM pending_transactions")
+        for row in cursor.fetchall():
+            transactions.append({
+                "tx_id": row["tx_id"],
+                "amount": row["amount"],
+                "vendor": _decrypt_string(row["vendor_encrypted"]) if row["vendor_encrypted"] else "Unknown",
+                "category": row["category"],
+                "date": row["date"],
+                "raw_message": _decrypt_string(row["raw_message_enc"]) if row["raw_message_enc"] else "",
+                "status": "pending",
+                "logged_by": _decrypt_string(row["logged_by_enc"]) if row["logged_by_enc"] else "Bot"
+            })
+    except sqlite3.OperationalError:
+        pass
+        
+    conn.close()
+    
+    # Sort by date descending
+    transactions.sort(key=lambda x: x["date"], reverse=True)
+    return transactions
 
 
 if __name__ == "__main__":

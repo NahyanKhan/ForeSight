@@ -43,21 +43,27 @@ def _get_db():
     return conn
 
 
+from data.db_manager import _encrypt_string, _decrypt_string
+
 def _store_transaction(parsed: dict, vendor_info: dict, user_name: str, status: str = "approved"):
     """Store a parsed transaction in the database."""
     conn = _get_db()
     tx_id = f"TX-TG-{datetime.now().strftime('%Y%m%d%H%M%S')}-{abs(hash(parsed['raw_message'])) % 10000:04d}"
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
 
+    enc_vendor = _encrypt_string(vendor_info["canonical_name"])
+    enc_msg = _encrypt_string(parsed["raw_message"])
+    enc_user = _encrypt_string(user_name)
+
     if status == "approved":
         conn.execute(
             "INSERT OR REPLACE INTO cash_transactions (tx_id, amount, vendor_encrypted, category, date, raw_message_enc, status, needs_approval, logged_by_enc) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (tx_id, parsed["amount"], vendor_info["canonical_name"], parsed["category"], now, parsed["raw_message"], "approved", 0, user_name)
+            (tx_id, parsed["amount"], enc_vendor, parsed["category"], now, enc_msg, "approved", 0, enc_user)
         )
     else:
         conn.execute(
             "INSERT OR REPLACE INTO pending_transactions (tx_id, amount, vendor_encrypted, category, date, raw_message_enc, logged_by_enc) VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (tx_id, parsed["amount"], vendor_info["canonical_name"], parsed["category"], now, parsed["raw_message"], user_name)
+            (tx_id, parsed["amount"], enc_vendor, parsed["category"], now, enc_msg, enc_user)
         )
     conn.commit()
     conn.close()
@@ -123,7 +129,10 @@ async def pending_command(update: Update, context):
         return
 
     for row in rows:
-        tx_id, amount, vendor, category, msg = row
+        tx_id, amount, vendor_enc, category, msg_enc = row
+        vendor = _decrypt_string(vendor_enc) if vendor_enc else "Unknown"
+        msg = _decrypt_string(msg_enc) if msg_enc else ""
+        
         keyboard = [[
             InlineKeyboardButton("Approve", callback_data=f"approve_{tx_id}"),
             InlineKeyboardButton("Reject", callback_data=f"reject_{tx_id}"),
@@ -172,14 +181,15 @@ async def handle_message(update: Update, context):
             f"Awaiting owner approval (>= Rs.{MAKER_CHECKER_THRESHOLD:,})"
         )
 
-        # Send approval request to owner
-        if OWNER_CHAT_ID:
-            keyboard = [[
-                InlineKeyboardButton("Approve", callback_data=f"approve_{tx_id}"),
-                InlineKeyboardButton("Reject", callback_data=f"reject_{tx_id}"),
-            ]]
-            await context.bot.send_message(
-                chat_id=OWNER_CHAT_ID,
+        # Send approval request to owner (fallback to current chat for demo if owner hasn't run /start)
+        target_chat_id = OWNER_CHAT_ID if OWNER_CHAT_ID else update.effective_chat.id
+        
+        keyboard = [[
+            InlineKeyboardButton("Approve", callback_data=f"approve_{tx_id}"),
+            InlineKeyboardButton("Reject", callback_data=f"reject_{tx_id}"),
+        ]]
+        await context.bot.send_message(
+            chat_id=target_chat_id,
                 text=f"APPROVAL NEEDED\n"
                      f"Rs.{parsed['amount']:,.0f} | {parsed['action']}\n"
                      f"Vendor: {vendor_info['canonical_name']}\n"

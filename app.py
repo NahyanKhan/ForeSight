@@ -17,6 +17,7 @@ from components.renderers import (
     render_fhe_panel, render_cash_ledger, render_what_if_result,
 )
 from data.synthetic_data import generate_all_data, BUYER_PROFILES
+from data.db_manager import fetch_live_cash_transactions
 from utils.calculations import (
     compute_overdue_probability, risk_adjusted_receivables,
     monte_carlo_runway, concentration_risk, what_if_simulation, detect_retaliation,
@@ -36,9 +37,16 @@ st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 
 
 # ─── Session State Init ──────────────────────────────────
-@st.cache_data
+@st.cache_data(ttl=5) # Cache for 5 seconds to pick up new bot entries
 def load_data():
-    return generate_all_data()
+    base_data = generate_all_data()
+    # Attempt to fetch live Telegram bot data
+    live_txs = fetch_live_cash_transactions(DB_PATH)
+    if live_txs:
+        # Prepend live transactions to synthetic ones (or replace entirely if preferred, 
+        # but prepending keeps the demo data rich while showing new entries at the top)
+        base_data["cash_transactions"] = live_txs + base_data["cash_transactions"]
+    return base_data
 
 data = load_data()
 fhe_sim = FHEDemoSimulator()
