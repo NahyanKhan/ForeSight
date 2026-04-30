@@ -23,6 +23,7 @@ from utils.calculations import (
     exponential_moving_average, payment_velocity, empirical_90th_percentile,
 )
 from utils.crypto_demo import FHEDemoSimulator
+from nlp_engine.contract_detector import extract_pdf_text, detect_dark_patterns
 
 # ─── Page Config ──────────────────────────────────────────
 st.set_page_config(
@@ -392,31 +393,42 @@ with tab5:
 
         uploaded = st.file_uploader("Upload Buyer Agreement (PDF)", type=["pdf"], key="contract_upload")
 
-        # Demo: show pre-analyzed results for Apex contract
-        st.markdown("**Demo: Apex Manufacturing Contract Analysis**")
-        dark_patterns = [
-            {"type": "Dispute-Triggered Hold", "severity": "🔴 Critical",
-             "clause": '"Payment shall be suspended upon any dispute raised by Buyer..."',
-             "impact": "₹8,47,000 at risk", "explanation": "Buyer can halt all payments by raising any dispute."},
-            {"type": "Invoicing-Defect Reset", "severity": "🔴 Critical",
-             "clause": '"Invoice rejected for defect resets the 45-day clock..."',
-             "impact": "₹4,20,000 potential delay", "explanation": "Minor invoice errors restart payment timer."},
-            {"type": "Set-Off Rights", "severity": "🟡 High",
-             "clause": '"Buyer may set off any amounts owed against future orders..."',
-             "impact": "₹2,10,000 exposure", "explanation": "Buyer can deduct arbitrary amounts from payments."},
-            {"type": "Force Majeure Loop", "severity": "🟡 High",
-             "clause": '"Force majeure includes market conditions..."',
-             "impact": "Indefinite delay risk", "explanation": "Overly broad definition allows indefinite deferral."},
-        ]
+        if uploaded is not None:
+            # Live analysis of uploaded PDF
+            with st.spinner("Extracting text and analyzing clauses..."):
+                pdf_text = extract_pdf_text(uploaded)
+                dark_patterns = detect_dark_patterns(pdf_text)
+            st.markdown(f"**Live Analysis: {uploaded.name}** ({len(pdf_text):,} chars extracted)")
+            if not dark_patterns:
+                st.markdown('<div class="alert-success">No dark-pattern clauses detected.</div>', unsafe_allow_html=True)
+        else:
+            # Demo: pre-analyzed Apex contract results
+            st.markdown("**Demo: Apex Manufacturing Contract Analysis**")
+            dark_patterns = [
+                {"type": "Dispute-Triggered Hold", "severity": "Critical", "severity_icon": "RED",
+                 "clause": '"Payment shall be suspended upon any dispute raised by Buyer..."',
+                 "impact": "\u20b98,47,000 at risk", "explanation": "Buyer can halt all payments by raising any dispute."},
+                {"type": "Invoicing-Defect Reset", "severity": "Critical", "severity_icon": "RED",
+                 "clause": '"Invoice rejected for defect resets the 45-day clock..."',
+                 "impact": "\u20b94,20,000 potential delay", "explanation": "Minor invoice errors restart payment timer."},
+                {"type": "Set-Off Rights", "severity": "High", "severity_icon": "YELLOW",
+                 "clause": '"Buyer may set off any amounts owed against future orders..."',
+                 "impact": "\u20b92,10,000 exposure", "explanation": "Buyer can deduct arbitrary amounts from payments."},
+                {"type": "Force Majeure Loop", "severity": "High", "severity_icon": "YELLOW",
+                 "clause": '"Force majeure includes market conditions..."',
+                 "impact": "Indefinite delay risk", "explanation": "Overly broad definition allows indefinite deferral."},
+            ]
+
         for dp in dark_patterns:
+            sev_icon = "\U0001f534 Critical" if dp.get('severity') == 'Critical' else "\U0001f7e1 High"
             st.markdown(f"""
             <div class="alert-danger" style="margin-bottom:0.6rem;">
                 <div style="display:flex; justify-content:space-between;">
-                    <strong>{dp['severity']} {dp['type']}</strong>
+                    <strong>{sev_icon} {dp['type']}</strong>
                     <span style="font-size:0.8rem; color:#FCA5A5;">{dp['impact']}</span>
                 </div>
                 <div style="font-size:0.8rem; color:#E2E8F0; margin-top:4px; font-style:italic;">{dp['clause']}</div>
-                <div style="font-size:0.78rem; color:#94A3B8; margin-top:3px;">💡 {dp['explanation']}</div>
+                <div style="font-size:0.78rem; color:#94A3B8; margin-top:3px;">\U0001f4a1 {dp['explanation']}</div>
             </div>
             """, unsafe_allow_html=True)
 
