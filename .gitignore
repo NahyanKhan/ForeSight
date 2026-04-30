@@ -1,0 +1,46 @@
+# ─── Environment ──────────────────────────────────────
+.env
+.env.local
+.env.*.local
+
+# ─── Database ─────────────────────────────────────────
+*.sqlite3
+*.db
+
+# ─── Python ───────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+*.egg
+
+# ─── Virtual Environments ────────────────────────────
+venv/
+.venv/
+env/
+ENV/
+
+# ─── IDE ──────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ─── OS Files ─────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ─── Streamlit Cache ─────────────────────────────────
+.streamlit/secrets.toml
+
+# ─── FHE Artifacts (large binary) ────────────────────
+*.fhe
+*.concrete
+
+# ─── Logs ─────────────────────────────────────────────
+*.log
