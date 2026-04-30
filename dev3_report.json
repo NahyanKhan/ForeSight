@@ -1,0 +1,20 @@
+{
+  "retaliation_report": {
+    "buyer": "Apex Manufacturing Pvt Ltd",
+    "pre_legal_invoice_count": 949,
+    "post_legal_invoice_count": 70,
+    "pre_monthly_avg": 118.62,
+    "post_monthly_avg": 17.5,
+    "volume_drop_magnitude": 0.8525,
+    "alert_fired": true
+  },
+  "runway_report": {
+    "cash_reserves": 2155144.0,
+    "monthly_fixed_cost": 326225.0,
+    "avg_monthly_collections": 46389804.58,
+    "avg_monthly_burn": 65245.0,
+    "base_runway_days": 990.95,
+    "runway_80pct_ci_lower": 990.95,
+    "runway_80pct_ci_upper": 990.95
+  }
+}

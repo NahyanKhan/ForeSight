@@ -1,0 +1,12 @@
+pandas
+numpy
+scikit-learn
+Faker
+joblib
+fastapi
+uvicorn
+fpdf
+cryptography
+streamlit
+plotly
+python-multipart
