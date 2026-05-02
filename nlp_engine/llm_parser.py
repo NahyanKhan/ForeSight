@@ -205,8 +205,8 @@ def llm_parse(text: str) -> dict:
         regex_amount = _extract_amount_from_text(text)
         if regex_amount and llm_amount > 0:
             ratio = max(llm_amount, regex_amount) / max(min(llm_amount, regex_amount), 1)
-            if ratio > 10:
-                # LLM amount is wildly off — trust regex
+            if ratio >= 10:
+                # LLM amount is wildly off (e.g. extra zero) — trust regex
                 llm_amount = regex_amount
 
         result = {

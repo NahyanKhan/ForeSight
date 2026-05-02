@@ -35,20 +35,28 @@ st.set_page_config(
 )
 st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 
+from streamlit_autorefresh import st_autorefresh
+# Auto-refresh the page every 5000 milliseconds (5 seconds)
+st_autorefresh(interval=5000, key="data_autorefresh")
+
 
 # ─── Session State Init ──────────────────────────────────
-@st.cache_data(ttl=5) # Cache for 5 seconds to pick up new bot entries
-def load_data():
-    base_data = generate_all_data()
-    # Attempt to fetch live Telegram bot data
-    live_txs = fetch_live_cash_transactions(DB_PATH)
-    if live_txs:
-        # Prepend live transactions to synthetic ones (or replace entirely if preferred, 
-        # but prepending keeps the demo data rich while showing new entries at the top)
-        base_data["cash_transactions"] = live_txs + base_data["cash_transactions"]
-    return base_data
+@st.cache_data(ttl=3600) # Cache synthetic data for 1 hour to avoid heavy regen
+def load_base_data():
+    return generate_all_data()
 
-data = load_data()
+base_data = load_base_data()
+data = {
+    "buyers": base_data["buyers"],
+    "invoices": base_data["invoices"],
+    "retaliation_orders": base_data["retaliation_orders"],
+    "cash_transactions": list(base_data["cash_transactions"])
+}
+
+# Fetch live Telegram bot data on every rerun
+live_txs = fetch_live_cash_transactions(DB_PATH)
+if live_txs:
+    data["cash_transactions"] = live_txs + data["cash_transactions"]
 fhe_sim = FHEDemoSimulator()
 
 if "selected_buyer" not in st.session_state:
@@ -57,9 +65,7 @@ if "selected_buyer" not in st.session_state:
 
 # ─── Compute Core Metrics ────────────────────────────────
 @st.cache_data
-def compute_metrics(_data):
-    invoices = _data["invoices"]
-    buyers = _data["buyers"]
+def compute_metrics(invoices, buyers):
 
     # Overdue probabilities per buyer
     overdue_probs = {}
@@ -105,7 +111,7 @@ def compute_metrics(_data):
         "daily_burn": daily_burn,
     }
 
-metrics = compute_metrics(data)
+metrics = compute_metrics(data["invoices"], data["buyers"])
 
 
 # ─── Sidebar ─────────────────────────────────────────────
